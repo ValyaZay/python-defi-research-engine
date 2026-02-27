@@ -1,0 +1,14 @@
+[project]
+name = "aave-v3-liquidation"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "dotenv>=0.9.9",
+    "jmespath>=1.1.0",
+    "pandas>=2.3.3",
+    "py-solc-x>=2.0.5",
+    "solc-select>=1.2.0",
+    "web3>=7.14.1",
+]
