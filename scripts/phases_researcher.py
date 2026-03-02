@@ -170,79 +170,57 @@ def get_latest_data():
     print("first_roundId_latest_phase: ", first_roundId_latest_phase)
     return latest_phaseId
 
-def collect_round_data_for_range(price_feed_address, start, end):
-    chunk_size = 100
-    filename = f"aggregatorsRoundData/{price_feed_address}.jsonl"
+def validate_round_id():
+    round_id = 129127208515966873862
+    uint64_max = 0x000000000000000000000000000000000000000000000000ffffffffffffffff
+    aggregatorRoundId = round_id & uint64_max
+    phaseId = round_id >> 64
+    print(f"phaseId: {phaseId}, roundsInPhase: ", aggregatorRoundId)
 
-    roundData = []
-    for round_id in range(start, end + 1):# end + 1 to include end roundId
+def get_start_data_from_phases(latest_phaseId):
+    print("------------------ GET START DATA SECTION ------------------")
+    # get first roundId in the phase and start timestamp
+    for phaseId in range(1, latest_phaseId + 1):
+        first_roundId_in_phase = (phaseId << 64) | 1
+
         try:
-            data = AGGREGATOR_CONTRACT.functions.getRoundData(round_id).call()
+            first_roundData_in_phase = AGGREGATOR_CONTRACT.functions.getRoundData(first_roundId_in_phase).call()
+        except ContractLogicError:
+            print(f"Reverted at round {first_roundId_in_phase}. No data.")
+            continue
+
+        phase_started_at_timestamp = first_roundData_in_phase[2]
+        phase_started_on_date = datetime.fromtimestamp(phase_started_at_timestamp).date()
+        print(f"loop data: phaseId {phaseId}, first_roundId_in_phase {first_roundId_in_phase}, phase_started_on_date {phase_started_on_date}")
+
+# get last roundId in the phase, end timestamp and amount of rounds in the phase
+def get_end_data_from_phases():    
+    loop_from_round_id = 110680464442257322597
+    while True:
+        try:
+            data = AGGREGATOR_CONTRACT.functions.getRoundData(loop_from_round_id).call()
+            
+            print(f"Round {loop_from_round_id}: {data}") 
             if(data[1] == 0):
-                print("Zero answer encountered. Stopping.")
                 break
 
-            roundDataItem = {
-                "roundId": data[0],
-                "answer": data[1],
-                "startedAt": data[2],
-                "updatedAt": data[3]
-            }
-            
-            print(f"Round {round_id}: {data}")
-
-            roundData.append(roundDataItem)
-            round_id += 1
-
-            # When chunk full → flush to disk
-            if len(roundData) >= chunk_size:
-                with open(filename, "a") as f:
-                    for obj in roundData:
-                        f.write(json.dumps(obj) + "\n")
-                roundData.clear()
-            
-            time.sleep(0.05)
+            loop_from_round_id += 1 #start from 1000 items step
 
         except ContractLogicError:
-            print(f"Reverted at round {round_id}. Stopping.")
+            print(f"Reverted at round {loop_from_round_id}. Stopping.")
             break
-    # Flush remaining items
-    if roundData:
-        with open(filename, "a") as f:
-            for obj in roundData:
-                f.write(json.dumps(obj) + "\n")
-    
-    print("Finished to collect data.")
 
-def get_last_saved_round(filename):
+def get_date_from_round_id():
+    end_round_id = 110680464442257322604
     try:
-        with open(filename, "rb") as f:
-            f.seek(-1024, 2)  # read last KB
-            lines = f.readlines()
-            last_line = lines[-1].decode()
-            return json.loads(last_line)["roundId"]
-    except:
-        return None
-    
-def collect_round_data(asset):
-    price_feed = asset_to_feed[asset]
-    filename = f"aggregatorsRoundData/{price_feed}.jsonl"
-
-    latest_round_data = AGGREGATOR_CONTRACT.functions.latestRoundData().call()
-    print('latest_round_id ', latest_round_data[0])
-    last_collected_round_id = get_last_saved_round(filename)
-    print('last_collected_round_id ', last_collected_round_id)
-    if last_collected_round_id is None:
-        last_collected_round_id = latest_round_data[0] - 5000 #for a year for dai
-        print('last_collected_round_id if none', last_collected_round_id)
-
-    collect_round_data_for_range(price_feed, last_collected_round_id + 1, latest_round_data[0])
-
+        end_round_data_in_phase = AGGREGATOR_CONTRACT.functions.getRoundData(end_round_id).call()
+    except ContractLogicError:
+        print(f"Reverted at round {end_round_id}. No data.")
+        
+    phase_ended_at_timestamp = end_round_data_in_phase[2]
+    phase_ended_on_date = datetime.fromtimestamp(phase_ended_at_timestamp).date()
+    print("phase_ended_on_date: ", phase_ended_on_date)
 
 if __name__ == '__main__':
-    asset = "0x6B175474E89094C44Da98b954EedeAC495271d0F" #dai
-
-    collect_round_data(asset)
-
-
-#python -m scripts.roundDataCollector
+    latest_phase_id = get_latest_data()
+    #get_start_data_from_phases(latest_phaseId=7)
